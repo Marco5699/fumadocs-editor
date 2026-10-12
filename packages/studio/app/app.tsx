@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { client, components, media, syntax } from "./providers";
 import { FilePanel } from "./files";
-import { filterLocaleTree, STUDIO_LOCALES, type StudioLocale } from "./languages";
+import { filterLocaleTree, STUDIO_LOCALES, fileLocale, translatedPath, translationCounts, createTranslation, type StudioLocale } from "./languages";
 import { Palette, type PaletteGroup, type PaletteItem } from "./palette";
 
 const COARSE = "@media (pointer: coarse)";
@@ -88,6 +88,35 @@ const styles = stylex.create({
     color: "var(--fde-foreground)",
     fontSize: 12,
     cursor: "pointer",
+  },
+  translationControls: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.4rem",
+  },
+  translationLabel: { fontSize: 12, color: muted },
+  translationSelect: {
+    width: "100%",
+    minWidth: 0,
+    height: "1.8rem",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--fde-border)",
+    borderRadius: "0.375rem",
+    color: "var(--fde-foreground)",
+    backgroundColor: "var(--fde-background)",
+  },
+  translationButton: {
+    padding: "0.4rem 0.5rem",
+    fontSize: 12,
+    borderRadius: "0.375rem",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--fde-border)",
+    color: "var(--fde-foreground)",
+    backgroundColor: "var(--fde-background)",
+    cursor: "pointer",
+    ":disabled": { opacity: 0.5, cursor: "not-allowed" },
   },
   path: {
     minWidth: 0,
@@ -181,6 +210,9 @@ export function Studio() {
     localStorage.setItem("fde-studio-locale", next);
   };
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [translationSource, setTranslationSource] = useState("");
+  const [translationBusy, setTranslationBusy] = useState(false);
+  const [translationError, setTranslationError] = useState<string | null>(null);
   // the editor mode lives on the ref; the palette snapshots it as it opens
   const [mode, setMode] = useState<EditorMode>("visual");
   const { theme, setTheme } = useEditorTheme();
@@ -218,6 +250,32 @@ export function Studio() {
     [tree, locale],
   );
   const files = useMemo(() => (visibleTree ? collectFiles(visibleTree.nodes) : []), [visibleTree]);
+  const allFiles = useMemo(() => (tree ? collectFiles(tree.nodes) : []), [tree]);
+  const counts = useMemo(() => tree ? translationCounts(tree) : null, [tree]);
+  const sourceChoices = useMemo(() => {
+    const existing = new Set(allFiles.map((file) => file.path));
+    return allFiles.filter((file) =>
+      fileLocale(file.path) === "zh-CN" &&
+      !existing.has(translatedPath(file.path, locale)),
+    );
+  }, [allFiles, locale]);
+  const selectedSource = sourceChoices.find((file) => file.path === translationSource) ?? sourceChoices[0];
+  const startTranslation = async () => {
+    if (!selectedSource || translationBusy || workspace.status !== "online") return;
+    const destination = translatedPath(selectedSource.path, locale);
+    setTranslationBusy(true);
+    setTranslationError(null);
+    try {
+      if (allFiles.some((file) => file.path === destination)) throw new Error("Translation already exists");
+      await createTranslation(client, workspace.run, selectedSource, destination);
+      openFile(destination);
+      setPanel(true);
+    } catch (error) {
+      setTranslationError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTranslationBusy(false);
+    }
+  };
   // the hash names the open file; a missing or stale one falls back to the first
   const active =
     hash !== null && files.some((file) => file.path === hash) ? hash : (files[0]?.path ?? null);
@@ -291,7 +349,9 @@ export function Studio() {
           {...stylex.props(styles.language)}
         >
           {STUDIO_LOCALES.map((option) => (
-            <option key={option.code} value={option.code}>{option.label}</option>
+            <option key={option.code} value={option.code}>
+              {option.label}{counts ? ` (${counts[option.code]}/${counts["zh-CN"]})` : ""}
+            </option>
           ))}
         </select>
         <span {...stylex.props(styles.path)}>{active}</span>
@@ -403,6 +463,43 @@ export function Studio() {
       {visibleTree && (
         <FilePanel
           tree={visibleTree}
+          controls={locale === "zh-CN" ? (
+            <div {...stylex.props(styles.translationControls)}>
+              <span {...stylex.props(styles.translationLabel)}>Translations: switch language above to create a copy of a missing page.</span>
+            </div>
+          ) : (
+            <div {...stylex.props(styles.translationControls)}>
+              <label htmlFor="translation-source" {...stylex.props(styles.translationLabel)}>
+                Create {STUDIO_LOCALES.find((item) => item.code === locale)?.label} translation
+              </label>
+              <select
+                id="translation-source"
+                aria-label="Source page to translate"
+                value={selectedSource?.path ?? ""}
+                onChange={(event) => setTranslationSource(event.target.value)}
+                disabled={translationBusy || sourceChoices.length === 0}
+                {...stylex.props(styles.translationSelect)}
+              >
+                {sourceChoices.length === 0 ? (
+                  <option value="">All source pages translated</option>
+                ) : sourceChoices.map((source) => (
+                  <option key={source.path} value={source.path}>{source.path}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void startTranslation()}
+                disabled={!selectedSource || translationBusy || workspace.status !== "online"}
+                {...stylex.props(styles.translationButton)}
+              >
+                {translationBusy ? "Creating..." : "Create from Chinese source"}
+              </button>
+              {translationError && <span role="alert" {...stylex.props(styles.translationLabel)}>{translationError}</span>}
+              <span {...stylex.props(styles.translationLabel)}>
+                {counts ? `${counts[locale]} of ${counts["zh-CN"]} source pages translated` : ""}
+              </span>
+            </div>
+          )}
           run={workspace.run}
           active={active}
           onSelect={openFile}
