@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { client, components, media, syntax } from "./providers";
 import { FilePanel } from "./files";
+import { filterLocaleTree, STUDIO_LOCALES, type StudioLocale } from "./languages";
 import { Palette, type PaletteGroup, type PaletteItem } from "./palette";
 
 const COARSE = "@media (pointer: coarse)";
@@ -76,6 +77,18 @@ const styles = stylex.create({
     outlineOffset: 2,
   },
   key: { display: { default: null, [COARSE]: "none" }, fontFamily: "inherit", fontSize: 11 },
+  language: {
+    maxWidth: "7.25rem",
+    height: "1.75rem",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--fde-border)",
+    borderRadius: "0.375rem",
+    backgroundColor: "var(--fde-background)",
+    color: "var(--fde-foreground)",
+    fontSize: 12,
+    cursor: "pointer",
+  },
   path: {
     minWidth: 0,
     overflow: "hidden",
@@ -159,6 +172,14 @@ export function Studio() {
   const [status, setStatus] = useState<DocumentStatus>("synced");
   const [writable, setWritable] = useState(true);
   const [panelOpen, setPanelOpen] = useState(() => localStorage.getItem(PANEL_KEY) === "1");
+  const [locale, setLocale] = useState<StudioLocale>(() => {
+    const saved = localStorage.getItem("fde-studio-locale");
+    return STUDIO_LOCALES.find((entry) => entry.code === saved)?.code ?? "zh-CN";
+  });
+  const changeLocale = (next: StudioLocale) => {
+    setLocale(next);
+    localStorage.setItem("fde-studio-locale", next);
+  };
   const [paletteOpen, setPaletteOpen] = useState(false);
   // the editor mode lives on the ref; the palette snapshots it as it opens
   const [mode, setMode] = useState<EditorMode>("visual");
@@ -192,7 +213,11 @@ export function Studio() {
     const nodes = retitle(workspace.tree.nodes, typed);
     return nodes === workspace.tree.nodes ? workspace.tree : { ...workspace.tree, nodes };
   }, [workspace.tree, typed]);
-  const files = useMemo(() => (tree ? collectFiles(tree.nodes) : []), [tree]);
+  const visibleTree = useMemo(
+    () => (tree ? filterLocaleTree(tree, locale) : null),
+    [tree, locale],
+  );
+  const files = useMemo(() => (visibleTree ? collectFiles(visibleTree.nodes) : []), [visibleTree]);
   // the hash names the open file; a missing or stale one falls back to the first
   const active =
     hash !== null && files.some((file) => file.path === hash) ? hash : (files[0]?.path ?? null);
@@ -258,6 +283,17 @@ export function Studio() {
         >
           <PanelLeft size={16} />
         </button>
+        <select
+          aria-label="Document language"
+          title="Document language"
+          value={locale}
+          onChange={(event) => changeLocale(event.target.value as StudioLocale)}
+          {...stylex.props(styles.language)}
+        >
+          {STUDIO_LOCALES.map((option) => (
+            <option key={option.code} value={option.code}>{option.label}</option>
+          ))}
+        </select>
         <span {...stylex.props(styles.path)}>{active}</span>
       </>
     ),
@@ -342,7 +378,7 @@ export function Studio() {
     message = "Access denied: this token cannot open the workspace.";
   } else if (!tree) {
     if (workspace.status === "offline") message = "The studio server is not reachable.";
-  } else if (files.length === 0) message = `No .md or .mdx files under ${tree.root}.`;
+  } else if (files.length === 0) message = `No ${locale} documents under ${tree.root}. Add a locale-suffixed .mdx file to begin.`;
 
   return (
     <div {...stylex.props(panelShown && styles.withPanel)} ref={rootRef}>
@@ -364,9 +400,9 @@ export function Studio() {
           />
         )
       )}
-      {tree && (
+      {visibleTree && (
         <FilePanel
-          tree={tree}
+          tree={visibleTree}
           run={workspace.run}
           active={active}
           onSelect={openFile}
