@@ -33,12 +33,12 @@ export function filterLocaleTree(tree: WorkspaceTree, locale: StudioLocale): Wor
 
 /** Return the base page path shared by all translations. */
 export function baseDocumentPath(path: string): string {
-  return path.replace(/\\.(zh-CN|zh-TW|ja|en)(?=\\.mdx?$)/i, "");
+  return path.replace(/\.(zh-CN|zh-TW|ja|en)(?=\.mdx?$)/i, "");
 }
 
 export function translatedPath(basePath: string, locale: StudioLocale): string {
   if (locale === "zh-CN") return basePath;
-  return basePath.replace(/(\\.mdx?)$/, `.${locale}$1`);
+  return basePath.replace(/(\.mdx?)$/, `.${locale}$1`);
 }
 
 export function translationCounts(tree: WorkspaceTree): Record<StudioLocale, number> {
