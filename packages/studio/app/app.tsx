@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { client, components, media, syntax } from "./providers";
 import { FilePanel } from "./files";
-import { filterLocaleTree, STUDIO_LOCALES, fileLocale, translatedPath, translationCounts, createTranslation, type StudioLocale } from "./languages";
+import { filterLocaleTree, expandLocaleOrder, STUDIO_LOCALES, fileLocale, translatedPath, translationCounts, createTranslation, type StudioLocale } from "./languages";
 import { Palette, type PaletteGroup, type PaletteItem } from "./palette";
 
 const COARSE = "@media (pointer: coarse)";
@@ -248,6 +248,11 @@ export function Studio() {
   const visibleTree = useMemo(
     () => (tree ? filterLocaleTree(tree, locale) : null),
     [tree, locale],
+  );
+  const runVisible = useCallback(
+    (command: Parameters<typeof workspace.run>[0]) =>
+      workspace.run(tree ? expandLocaleOrder(tree, locale, command) : command),
+    [workspace.run, tree, locale],
   );
   const files = useMemo(() => (visibleTree ? collectFiles(visibleTree.nodes) : []), [visibleTree]);
   const allFiles = useMemo(() => (tree ? collectFiles(tree.nodes) : []), [tree]);
@@ -500,7 +505,7 @@ export function Studio() {
               </span>
             </div>
           )}
-          run={workspace.run}
+          run={runVisible}
           active={active}
           onSelect={openFile}
           hidden={!panelShown}
