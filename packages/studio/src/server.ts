@@ -108,7 +108,18 @@ export function baseConfig(projectRoot: string): InlineConfig {
     envDir: false,
     root: appDir,
     resolve: { dedupe: PINNED },
-    server: { fs: { allow: [appDir, projectRoot] } },
+    // The compiled UI package loads lazy chunks from its own dist directory.
+    // Vite needs this path on the static allow list before it starts serving.
+    server: {
+      fs: {
+        allow: [
+          appDir,
+          projectRoot,
+          path.dirname(fileURLToPath(import.meta.resolve("@fumadocs-editor/ui"))),
+          path.dirname(fileURLToPath(import.meta.resolve("@fumadocs-editor/core"))),
+        ],
+      },
+    },
   };
 }
 
