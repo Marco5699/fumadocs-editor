@@ -372,7 +372,7 @@ describe("shared multilingual meta ordering", () => {
     try {
       await mkdir(path.join(root, "setup"));
       for (const file of ["a.mdx", "b.mdx", "a.zh-TW.mdx", "b.zh-TW.mdx"]) {
-        await writeFile(path.join(root, "setup", file), "---\\ntitle: Example\\n---\\n");
+        await writeFile(path.join(root, "setup", file), "---\ntitle: Example\n---\n");
       }
       await writeFile(path.join(root, "setup", "meta.json"),
         JSON.stringify({ title: "Setup", pages: ["a", "b.zh-TW", "b"] }));
