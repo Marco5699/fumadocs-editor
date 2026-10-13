@@ -44,7 +44,7 @@ describe("Studio translations", () => {
   it("counts language coverage correctly", () => {
     expect(translationCounts(tree)).toEqual({ "zh-CN": 2, "zh-TW": 0, ja: 1, en: 1 });
   });
-  it("writes the full order without dropping hidden translations", () => {
+  it("writes shared canonical page keys when dragging Chinese", () => {
     const full: WorkspaceTree = {
       root: "docs",
       nodes: [{
@@ -56,12 +56,31 @@ describe("Studio translations", () => {
         ],
       }],
     };
-    const cmd = expandLocaleOrder(full, "zh-CN", {
+    expect(expandLocaleOrder(full, "zh-CN", {
       type: "order", dir: "mini", order: ["setup", "index"],
-    });
-    expect(cmd).toEqual({
-      type: "order", dir: "mini",
-      order: ["setup", "index.ja", "index", "setup.ja"],
+    })).toEqual({ type: "order", dir: "mini", order: ["setup", "index"] });
+    expect(expandLocaleOrder(full, "ja", {
+      type: "order", dir: "mini", order: ["setup.ja", "index.ja"],
+    })).toEqual({ type: "order", dir: "mini", order: ["setup", "index"] });
+  });
+
+  it("preserves untranslated source pages when dragging another language", () => {
+    const full: WorkspaceTree = {
+      root: "docs",
+      nodes: [{
+        type: "folder", name: "mini", path: "mini", title: "Mini", children: [
+          { type: "file", name: "first", path: "mini/first.mdx", title: "First" },
+          { type: "file", name: "first.ja", path: "mini/first.ja.mdx", title: "First ja" },
+          { type: "file", name: "untranslated", path: "mini/untranslated.mdx", title: "Untranslated" },
+          { type: "file", name: "last", path: "mini/last.mdx", title: "Last" },
+          { type: "file", name: "last.ja", path: "mini/last.ja.mdx", title: "Last ja" },
+        ],
+      }],
+    };
+    expect(expandLocaleOrder(full, "ja", {
+      type: "order", dir: "mini", order: ["last.ja", "first.ja"],
+    })).toEqual({
+      type: "order", dir: "mini", order: ["last", "untranslated", "first"],
     });
   });
 
