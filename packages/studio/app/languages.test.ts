@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileLocale, translatedPath, translationCounts, filterLocaleTree } from "./languages";
+import { fileLocale, translatedPath, translationCounts, filterLocaleTree, expandLocaleOrder } from "./languages";
 import type { WorkspaceTree } from "@fumadocs-editor/core/sync";
 
 const tree: WorkspaceTree = {
@@ -44,4 +44,25 @@ describe("Studio translations", () => {
   it("counts language coverage correctly", () => {
     expect(translationCounts(tree)).toEqual({ "zh-CN": 2, "zh-TW": 0, ja: 1, en: 1 });
   });
+  it("writes the full order without dropping hidden translations", () => {
+    const full: WorkspaceTree = {
+      root: "docs",
+      nodes: [{
+        type: "folder", name: "mini", path: "mini", title: "Mini", children: [
+          { type: "file", name: "index", path: "mini/index.mdx", title: "Index" },
+          { type: "file", name: "index.ja", path: "mini/index.ja.mdx", title: "Japanese" },
+          { type: "file", name: "setup", path: "mini/setup.mdx", title: "Setup" },
+          { type: "file", name: "setup.ja", path: "mini/setup.ja.mdx", title: "Setup Japanese" },
+        ],
+      }],
+    };
+    const cmd = expandLocaleOrder(full, "zh-CN", {
+      type: "order", dir: "mini", order: ["setup", "index"],
+    });
+    expect(cmd).toEqual({
+      type: "order", dir: "mini",
+      order: ["setup", "index.ja", "index", "setup.ja"],
+    });
+  });
+
 });
