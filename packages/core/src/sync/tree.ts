@@ -47,6 +47,11 @@ export type Entry =
   | Extract<TreeNode, { type: "separator" | "link" }>;
 
 export const MARKDOWN = /\.mdx?$/;
+/** The page key used by Fumadocs' shared meta.json across translated MDX files. */
+export function canonicalPageKey(key: string): string {
+  return key.replace(/\.(?:zh-CN|zh-TW|ja|en)$/i, "");
+}
+
 const SEPARATOR = /^---(?:\[([^\]]+)\])?(.+)---$|^---$/;
 const LINK = /^(external:)?(?:\[([^\]]+)\])?\[([^\]]+)\]\(([^)]+)\)$/;
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
@@ -156,7 +161,7 @@ function indexDirs(files: Iterable<string>, canRead: (path: string) => boolean):
 export function folderKeys({ files }: WorkspaceIndex, dir: string): string[] | undefined {
   const entry = indexDirs(files.keys(), () => true).get(dir);
   if (!entry) return;
-  const sorted = [...entry.files.keys()];
+  const sorted = [...new Set([...entry.files.keys()].map(canonicalPageKey))];
   for (const name of entry.dirs) sorted.push(`${name}/`);
   sorted.sort(byName);
   const keys: string[] = [];
@@ -180,17 +185,22 @@ export function buildTree(
 
   const build = (dir: string): TreeNode[] => {
     const entry = dirs.get(dir)!;
-    // a folder and a file may share a key (`guides.mdx` beside `guides/`)
-    const items = new Map<string, TreeNode>();
+    // Group translation variants under the same canonical meta.json key.
+    // File nodes retain their real filenames, but ordering uses the base page key.
+    const items = new Map<string, TreeNode[]>();
+    const add = (key: string, node: TreeNode) =>
+      items.set(key, [...(items.get(key) ?? []), node]);
     for (const [key, file] of entry.files) {
-      items.set(key, { type: "file", name: key, path: file, title: files.get(file) ?? key });
+      add(canonicalPageKey(key), {
+        type: "file", name: key, path: file, title: files.get(file) ?? key,
+      });
     }
     for (const name of entry.dirs) {
       const childPath = dir ? `${dir}/${name}` : name;
       const children = build(childPath);
       if (children.length === 0) continue;
       const title = metas.get(childPath)?.title;
-      items.set(`${name}/`, {
+      add(`${name}/`, {
         type: "folder",
         name,
         path: childPath,
@@ -216,16 +226,18 @@ export function buildTree(
           ordered.push(entry);
           continue;
         }
-        const found =
-          items.get(`${entry.key}/`) ?? (entry.folderOnly ? undefined : items.get(entry.key));
+        const folderKey = `${entry.key}/`;
+        const key = items.has(folderKey) ? folderKey : entry.folderOnly ? undefined : canonicalPageKey(entry.key);
+        if (!key) continue;
+        const found = items.get(key);
         if (!found) continue;
-        items.delete(found.type === "folder" ? `${entry.key}/` : entry.key);
-        ordered.push(found);
+        items.delete(key);
+        ordered.push(...found);
       }
     }
     const rest = [...items.keys()].sort(descending ? byNameDesc : byName);
     const nodes: TreeNode[] = [];
-    for (const key of rest) nodes.push(items.get(key)!);
+    for (const key of rest) nodes.push(...items.get(key)!);
     if (restAt < 0) return ordered.concat(nodes);
     ordered.splice(restAt, 0, ...nodes);
     return ordered;

@@ -342,3 +342,48 @@ describe("commands", () => {
     await expect(workspace.remove("guides/new.mdx", async () => {})).rejects.toThrow(/no page at/);
   });
 });
+
+describe("shared multilingual meta ordering", () => {
+  test("the same unsuffixed meta pages order applies to every translation", () => {
+    const files = new Map<string, string | undefined>([
+      ["guide/a.mdx", "A"],
+      ["guide/b.mdx", "B"],
+      ["guide/a.zh-TW.mdx", "A TW"],
+      ["guide/b.zh-TW.mdx", "B TW"],
+    ]);
+    const nodes = buildTree({
+      files,
+      metas: new Map([["guide", { pages: ["b", "a"] }]]),
+    });
+    const folder = nodes.find((node) => node.type === "folder");
+    expect(folder?.type).toBe("folder");
+    if (folder?.type === "folder") {
+      const filenames = folder.children.filter((node) => node.type === "file").map((node) =>
+        node.type === "file" ? node.path : "");
+      expect(filenames).toEqual([
+        "guide/b.mdx", "guide/b.zh-TW.mdx",
+        "guide/a.mdx", "guide/a.zh-TW.mdx",
+      ]);
+    }
+  });
+
+  test("dragging a locale page writes only canonical page names to meta.json", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fde-shared-order-"));
+    try {
+      await mkdir(path.join(root, "setup"));
+      for (const file of ["a.mdx", "b.mdx", "a.zh-TW.mdx", "b.zh-TW.mdx"]) {
+        await writeFile(path.join(root, "setup", file), "---\ntitle: Example\n---\n");
+      }
+      await writeFile(path.join(root, "setup", "meta.json"),
+        JSON.stringify({ title: "Setup", pages: ["a", "b.zh-TW", "b"] }));
+      const workspace = await openWorkspace(root);
+      await workspace.order("setup", ["b", "a"]);
+      const meta = JSON.parse(await readFile(path.join(root, "setup", "meta.json"), "utf8"));
+      expect(meta.title).toBe("Setup");
+      expect(meta.pages).toEqual(["b", "a"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+

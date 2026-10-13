@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { FileTree, type FileTreeProps } from "@fumadocs-editor/ui";
 
 const REDUCE = "@media (prefers-reduced-motion: reduce)";
 
 const styles = stylex.create({
+  controls: { padding: "0.5rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "var(--fde-border)", marginBottom: "0.375rem" },
   panel: {
     position: "fixed",
     top: "3.25rem",
@@ -38,10 +39,11 @@ const styles = stylex.create({
 export interface FilePanelProps extends Omit<FileTreeProps, "className" | "ref"> {
   hidden: boolean;
   onClose: () => void;
+  controls?: ReactNode;
 }
 
 /** the floating file list: opening focuses the open file's row, Escape closes it */
-export function FilePanel({ hidden, onClose, ...tree }: FilePanelProps) {
+export function FilePanel({ hidden, onClose, controls, ...tree }: FilePanelProps) {
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export function FilePanel({ hidden, onClose, ...tree }: FilePanelProps) {
         if (event.key === "Escape" && ref.current!.contains(event.target as Node)) onClose();
       }}
     >
+      {controls && <div {...stylex.props(styles.controls)}>{controls}</div>}
       <FileTree {...tree} />
     </aside>
   );

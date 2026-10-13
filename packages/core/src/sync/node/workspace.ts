@@ -3,6 +3,7 @@ import { mkdir, open, readFile, readdir, stat, writeFile } from "node:fs/promise
 import path from "node:path";
 import {
   MARKDOWN,
+  canonicalPageKey,
   buildTree,
   folderKeys,
   frontmatterTitle,
@@ -221,7 +222,7 @@ export async function openWorkspace(root: string): Promise<Workspace> {
         throw error;
       }
       const { dir, key } = split(relative);
-      await list(dir, key);
+      await list(dir, canonicalPageKey(key));
       await refresh(relative);
     },
 
@@ -248,12 +249,13 @@ export async function openWorkspace(root: string): Promise<Workspace> {
       await unlink();
       index.files.delete(relative);
       const { dir, key } = split(relative);
+      const canonical = canonicalPageKey(key);
       const pages = index.metas.get(dir)?.pages;
-      if (Array.isArray(pages) && listsKey(pages, key) && !folderKeys(index, dir)?.includes(key)) {
+      if (Array.isArray(pages) && listsKey(pages, canonical) && !folderKeys(index, dir)?.includes(canonical)) {
         const kept: string[] = [];
         for (const item of pages) {
           const entry = parseEntry(item);
-          if (entry.type !== "key" || entry.key !== key) kept.push(item);
+          if (entry.type !== "key" || entry.key !== canonical) kept.push(item);
         }
         await writeMeta(dir, kept);
       }
@@ -271,7 +273,18 @@ export async function openWorkspace(root: string): Promise<Workspace> {
         }
       }
       const pages = index.metas.get(dir)?.pages;
-      const next = orderPages(pages, order, keys);
+      // Normalize legacy suffixed entries written by older Studio versions.
+      // Never leave language-specific keys in the shared Fumadocs meta.json.
+      const normalized = Array.isArray(pages)
+        ? [...new Set(pages.map((item) => {
+            const entry = parseEntry(item);
+            if (entry.type !== "key") return item;
+            const key = canonicalPageKey(entry.key);
+            if (key === entry.key) return item;
+            return item.replace(entry.key, key);
+          }))]
+        : undefined;
+      const next = orderPages(normalized, order, keys);
       if (JSON.stringify(next) === JSON.stringify(Array.isArray(pages) ? pages : ["..."])) return;
       await writeMeta(dir, next);
     },
