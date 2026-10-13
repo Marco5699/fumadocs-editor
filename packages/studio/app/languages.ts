@@ -1,4 +1,4 @@
-import type { TreeNode, WorkspaceTree, SyncClient, DocumentEditor } from "@fumadocs-editor/core/sync";
+import { pagesEntry, type TreeCommand, type TreeNode, type WorkspaceTree, type SyncClient, type DocumentEditor } from "@fumadocs-editor/core/sync";
 
 /** The default language uses bare .md/.mdx filenames; translations use locale suffixes. */
 export const STUDIO_LOCALES = [
@@ -96,4 +96,37 @@ export async function createTranslation(
   } finally {
     doc.close();
   }
+}
+
+/** Read sibling nodes from the unfiltered tree, preserving hidden translations. */
+function siblingNodes(nodes: TreeNode[], dir: string): TreeNode[] {
+  if (!dir) return nodes;
+  for (const node of nodes) {
+    if (node.type !== "folder") continue;
+    if (node.path === dir) return node.children;
+    if (dir.startsWith(`${node.path}/`)) return siblingNodes(node.children, dir);
+  }
+  return [];
+}
+
+/** Expand a locale-only reorder into a complete meta.json pages order. */
+export function expandLocaleOrder(
+  tree: WorkspaceTree,
+  locale: StudioLocale,
+  command: TreeCommand,
+): TreeCommand {
+  if (command.type !== "order") return command;
+  const all = siblingNodes(tree.nodes, command.dir);
+  const visible = siblingNodes(filterLocaleTree(tree, locale).nodes, command.dir);
+  const allEntries = all.map(pagesEntry);
+  const visibleEntries = visible.map(pagesEntry);
+  const visibleSet = new Set(visibleEntries);
+  // Never delete other language entries from meta.json.
+  if (!command.order.every((entry) => visibleSet.has(entry))) return command;
+  if (command.order.length !== visibleEntries.length) return command;
+  let index = 0;
+  return {
+    ...command,
+    order: allEntries.map((entry) => visibleSet.has(entry) ? command.order[index++] : entry),
+  };
 }
