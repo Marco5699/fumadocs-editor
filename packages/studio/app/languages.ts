@@ -109,7 +109,7 @@ function siblingNodes(nodes: TreeNode[], dir: string): TreeNode[] {
   return [];
 }
 
-/** Expand a locale-only reorder into a complete meta.json pages order. */
+/** Any locale reorders the shared canonical page keys in meta.json. */
 export function expandLocaleOrder(
   tree: WorkspaceTree,
   locale: StudioLocale,
@@ -118,15 +118,17 @@ export function expandLocaleOrder(
   if (command.type !== "order") return command;
   const all = siblingNodes(tree.nodes, command.dir);
   const visible = siblingNodes(filterLocaleTree(tree, locale).nodes, command.dir);
-  const allEntries = all.map(pagesEntry);
-  const visibleEntries = visible.map(pagesEntry);
+  const canonical = (item: string) => item.replace(/\.(?:zh-CN|zh-TW|ja|en)$/i, "");
+  const unique = (nodes: TreeNode[]) => [...new Set(nodes.map((node) => canonical(pagesEntry(node))))];
+  const allEntries = unique(all);
+  const visibleEntries = unique(visible);
   const visibleSet = new Set(visibleEntries);
-  // Never delete other language entries from meta.json.
-  if (!command.order.every((entry) => visibleSet.has(entry))) return command;
-  if (command.order.length !== visibleEntries.length) return command;
+  const requested = [...new Set(command.order.map(canonical))];
+  if (requested.length !== visibleEntries.length ||
+      !requested.every((entry) => visibleSet.has(entry))) return command;
   let index = 0;
   return {
     ...command,
-    order: allEntries.map((entry) => visibleSet.has(entry) ? command.order[index++] : entry),
+    order: allEntries.map((entry) => visibleSet.has(entry) ? requested[index++] : entry),
   };
 }
